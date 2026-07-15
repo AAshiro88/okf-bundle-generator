@@ -1,247 +1,101 @@
-# OKF Bundle Generator
+# okf-bundle-generator
 
-An AI skill that converts documents (text files, Word, PDF, source code, chat logs, screenshots, or any material) into [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) knowledge bundles — structured, hierarchical markdown knowledge bases that can be read by both humans and AI agents.
+A Claude Skill that converts user-supplied source material (text files, Word documents, PDFs, code, chat logs, screenshots, or any other input) into a markdown knowledge bundle conforming to the [Open Knowledge Format (OKF) v0.1 spec](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md), and writes it directly to the user's local filesystem.
 
-## What It Does
+## What this Skill does
 
-Given raw documents or knowledge discussed in a conversation, this skill:
+- Splits source content into concept-level markdown files, each with OKF-compliant YAML frontmatter and a structured body.
+- Auto-generates a category folder structure plus `index.md` files at every level.
+- Applies a personal, non-OKF extension for image handling: images referenced by a concept file are moved into a category-level `img/` folder, and the original filenames are recorded in the file's frontmatter.
+- Supports two additional workflows via `prompts/`: generating OKF documents from structured metadata (table schemas, API specs), and enriching an existing bundle by crawling web pages.
 
-1. Analyzes content and determines logical categories (subdirectories)
-2. Converts each knowledge point into an OKF-compliant concept file (markdown with YAML frontmatter)
-3. Moves images into categorized `img/` folders with proper references
-4. Generates `index.md` files at each directory level
-5. Optionally logs changes in `log.md`
+## Design principle: MCP-agnostic
 
-## Output Structure
+The Skill is written against five abstract filesystem capabilities — **read file, write file, create directory, list directory, move file** — rather than any specific MCP server's tool names. The mapping from these abstractions to concrete tool names for the environment currently in use lives in a single table inside `SKILL.md`. Moving to a different filesystem MCP server only requires updating that one table; nothing else in the Skill needs to change.
 
-```
-20260709-OKF/
-├── index.md                    # Bundle root index
-├── it-support/
-│   ├── index.md                # Category index
-│   ├── vpn-troubleshooting.md  # Concept file
-│   └── img/
-│       └── vpn-error-screenshot.png
-└── network/
-    ├── index.md
-    └── firewall-rules.md
-```
+If no filesystem MCP is connected, the Skill falls back to Claude's own sandbox tools (`create_file`, `bash_tool`), produces the same structure under `/mnt/user-data/outputs`, and delivers it via `present_files` — the user must then download the result and place it in the intended local folder themselves.
 
-## Project Structure
+## Repository structure
 
 ```
 okf-bundle-generator/
-├── SKILL.md                          # Main skill definition & workflow
-├── prompts/
-│   ├── enrich-from-metadata.md       # Generate concept files from structured metadata
-│   └── ingest-from-web.md            # Expand bundle by scraping web content
+├── SKILL.md                          # Entry point: workflow, capability mapping, conventions
 ├── references/
-│   ├── okf-spec-summary.md           # OKF v0.1 spec summary (frontmatter, body, index, log rules)
-│   ├── image-handling.md             # Custom image archiving rules
-│   └── advanced-conventions.md       # Advanced conventions (references/, metrics, joins)
-└── skills/
-    ├── kb-search/
-    │   └── REFERENCE.md              # Search existing local markdown knowledge bases
-    └── fileset-source/
-        └── REFERENCE.md              # Access markdown file directories via fileset MCP
+│   ├── okf-spec-summary.md           # Condensed OKF v0.1 spec (frontmatter, body, index/log rules)
+│   ├── image-handling.md             # Personal image-archiving convention (not part of OKF itself)
+│   └── advanced-conventions.md       # Optional: references/, metrics/joins reference docs
+├── skills/
+│   ├── kb-search/REFERENCE.md        # Optional helper: search/read an existing local knowledge base
+│   └── fileset-source/REFERENCE.md   # Optional helper: access a markdown fileset via an MCP server
+└── prompts/
+    ├── enrich-from-metadata.md       # Generate OKF docs from structured metadata (schemas, API specs)
+    └── ingest-from-web.md            # Enrich an existing bundle by crawling and summarizing web pages
 ```
 
-## Key Concepts
+## Core workflow (see `SKILL.md` for full detail)
 
-| Term | Description |
-|---|---|
-| **Knowledge Bundle** | A self-contained, hierarchical collection of markdown knowledge files |
-| **Concept** | A single knowledge unit (one `.md` file) — can be a concrete asset (table, API) or abstract concept (SOP, playbook) |
-| **Concept ID** | The file path within the bundle without `.md` extension (e.g., `it-support/vpn-troubleshooting`) |
-| **Frontmatter** | YAML block at the top of each concept file (`type` is required) |
+1. Confirm the output location and bundle name (`<output-location>\<YYYYMMDD>-OKF`, or update an existing bundle in place if one is found).
+2. Read all source files and decide on category subfolders.
+3. Write one concept `.md` file per knowledge point, following the frontmatter/body rules in `references/okf-spec-summary.md`.
+4. Move any images into the relevant category's `img/` folder and record them in frontmatter (`references/image-handling.md`).
+5. Generate `index.md` at the bundle root and at every populated subfolder.
+6. (Optional) Append a dated entry to `log.md` when updating an existing bundle.
+7. Self-check the resulting tree and flag anything ambiguous (unclear `type`, unclassified images, etc.) instead of reporting unconditional success.
 
-## OKF Concept File Format
+## Known gaps / things to be aware of
 
-```yaml
----
-type: Troubleshooting Guide    # Required
-title: VPN Connection Issues   # Recommended
-description: Steps to diagnose VPN failures.  # Recommended
-resource: https://...          # Optional - URI of the actual asset
-tags: [it-support, vpn]        # Optional
-timestamp: 2026-07-09T10:00:00Z  # Optional
-images: [error-screenshot.png] # Custom extension for image tracking
----
-```
+- The fallback (no filesystem MCP) sandbox path cannot copy a file within the user's own machine — only move. If the user needs the original file to stay in place, this must be handled manually.
+- `web_fetch` (used by `ingest-from-web.md`) can only fetch URLs that have already appeared in the conversation; it has no independent crawling capability of its own, and there is no built-in page-count or host-allowlist enforcement — those limits must be tracked manually during the workflow.
+- The optional helper skills (`kb-search`, `fileset-source`) assume specific MCP servers (`fileskb`, `md-fileset`); when those aren't connected, the fallback path degrades to listing every file and manually scanning for keywords, which does not scale well to a large knowledge base.
 
-## Prerequisites
+____
 
-The skill requires filesystem tools with these five abstract capabilities:
+# okf-bundle-generator
 
-| Capability | Purpose |
-|---|---|
-| Read file | Read full content of a single file |
-| Write file | Create new or overwrite existing files |
-| Create directory | Create folders (including nested paths) |
-| List directory | List files and subdirectories at a given path |
-| Move file | Move a file from one path to another |
+這是一個 Claude Skill，將使用者提供的來源素材（文字檔、Word、PDF、程式碼、聊天紀錄、螢幕截圖或其他任何素材）轉換成符合 [Open Knowledge Format（OKF）v0.1 規範](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) 的 markdown 知識包，並直接寫入使用者本機的檔案系統。
 
-These map to any filesystem MCP server (e.g., `Filesystem:read_text_file`, `Filesystem:write_file`, etc.) or Claude's sandbox tools.
+## 這個 Skill 做什麼
 
-## Workflow
+- 將來源內容拆分成一份份 concept 層級的 markdown 文件，每份都帶有符合 OKF 規範的 YAML frontmatter 與結構化 body。
+- 自動建立分類資料夾結構，並在每一層產生對應的 `index.md`。
+- 套用一條非 OKF 官方規範、屬於個人擴充的圖片處理慣例：concept 文件引用到的圖片會被搬移到該分類底下的 `img/` 資料夾，原始檔名記錄在該文件的 frontmatter 中。
+- 透過 `prompts/` 目錄支援另外兩種工作流程：從結構化 metadata（資料表 schema、API 規格）產生 OKF 文件，以及透過爬取網頁擴充既有 bundle。
 
-1. **Confirm output location** — Ask user where to place the bundle (default: `<Desktop>/<YYYYMMDD>-OKF/`)
-2. **Analyze source content** — Categorize by topic into subdirectories (e.g., `it-support`, `network`, `database`)
-3. **Write concept files** — Create one `.md` per knowledge point following OKF frontmatter/body rules
-4. **Handle images** — Move images to `<category>/img/`, embed with relative paths, record in frontmatter `images` field
-5. **Generate index.md** — Create at bundle root and each category directory
-6. **Optional: Log changes** — Append to `log.md` if updating an existing bundle
-7. **Self-verify** — Check directory structure, validate frontmatter, confirm image placement, verify links
+## 設計原則：MCP-agnostic（不綁定特定 MCP）
 
-## Advanced Features
+此 Skill 是依照五種抽象檔案系統能力撰寫的——**讀檔、寫檔、建立目錄、列出目錄、搬移檔案**——而不是綁定任何特定 MCP server 的工具名稱。這些抽象能力與目前環境實際連接工具名稱之間的對應，集中放在 `SKILL.md` 裡的一張表格。換到別的檔案系統 MCP server 時，只需要更新這一張表，Skill 其餘部分完全不用修改。
 
-### Enrich from Metadata
-
-Generate concept files from structured data (database schemas, API specs, dataset descriptions). See `prompts/enrich-from-metadata.md`.
-
-### Ingest from Web
-
-Expand an existing bundle by scraping authoritative documentation websites. Supports metrics, dimensions, and join path extraction. See `prompts/ingest-from-web.md`.
-
-### Advanced Conventions
-
-Optional organizational patterns beyond OKF v0.1 spec:
-- `references/` subdirectory for shared definitions
-- `references/metrics/<slug>.md` for metric definitions with SQL
-- `references/joins/<a>__<b>.md` for table join paths
-- `# Metrics`, `# Joins`, `# Dimensions` sections in concept files
-
-See `references/advanced-conventions.md`.
-
-## OKF Conformance (v0.1)
-
-A bundle is conformant when:
-
-1. Every non-reserved `.md` file contains parseable YAML frontmatter with a non-empty `type` field
-2. Reserved filenames (`index.md`, `log.md`) follow their respective format rules
-3. Consumer must tolerate: missing optional frontmatter fields, unknown `type` values, extra frontmatter fields, broken internal links, missing `index.md`
-
----
-
-# OKF Bundle Generator
-
-一個 AI 技能，將使用者提供的文件（文字檔、Word、PDF、程式碼、聊天紀錄、螢幕截圖或任何素材）轉換成 [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) 知識包 — 結構化、具層級的 markdown 知識庫，可被人類與 AI agent 讀取。
-
-## 功能說明
-
-給定原始文件或對話中討論出的知識，此技能會：
-
-1. 分析內容並決定邏輯分類（子目錄）
-2. 將每個知識點轉換為符合 OKF 規範的概念文件（帶 YAML frontmatter 的 markdown）
-3. 將圖片移至分類的 `img/` 資料夾並建立正確引用
-4. 在每個目錄層級產生 `index.md`
-5. 選用：在 `log.md` 輸出異動紀錄
-
-## 輸出結構
-
-```
-20260709-OKF/
-├── index.md                    # Bundle 根目錄索引
-├── it-support/
-│   ├── index.md                # 分類索引
-│   ├── vpn-troubleshooting.md  # 概念文件
-│   └── img/
-│       └── vpn-error-screenshot.png
-└── network/
-    ├── index.md
-    └── firewall-rules.md
-```
+若沒有連接任何檔案系統 MCP，此 Skill 會改用 Claude 自己的沙盒工具（`create_file`、`bash_tool`），在 `/mnt/user-data/outputs` 產生相同結構，再透過 `present_files` 交付——使用者需要自行下載結果並放到本機預期的資料夾。
 
 ## 專案結構
 
 ```
 okf-bundle-generator/
-├── SKILL.md                          # 主技能定義與工作流程
-├── prompts/
-│   ├── enrich-from-metadata.md       # 從結構化 metadata 產生概念文件
-│   └── ingest-from-web.md            # 從網頁抓取內容擴充 bundle
+├── SKILL.md                          # 入口文件：工作流程、抽象能力對應表、規範慣例
 ├── references/
-│   ├── okf-spec-summary.md           # OKF v0.1 規範摘要（frontmatter、body、index、log 規則）
-│   ├── image-handling.md             # 自訂圖片歸檔規則
-│   └── advanced-conventions.md       # 進階慣例（references/、metrics、joins）
-└── skills/
-    ├── kb-search/
-    │   └── REFERENCE.md              # 從本機 markdown 知識庫搜尋文件
-    └── fileset-source/
-        └── REFERENCE.md              # 透過 fileset MCP 存取 markdown 文件目錄
+│   ├── okf-spec-summary.md           # OKF v0.1 規範摘要（frontmatter、body、index/log 規則）
+│   ├── image-handling.md             # 個人圖片歸檔慣例（非 OKF 官方規範的一部分）
+│   └── advanced-conventions.md       # 選用：references/ 子目錄、metrics/joins 參考文件慣例
+├── skills/
+│   ├── kb-search/REFERENCE.md        # 選用輔助技能：搜尋、讀取既有本機知識庫
+│   └── fileset-source/REFERENCE.md   # 選用輔助技能：透過 MCP server 存取 markdown 文件目錄
+└── prompts/
+    ├── enrich-from-metadata.md       # 從結構化 metadata（schema、API 規格）產生 OKF 文件
+    └── ingest-from-web.md            # 透過爬取網頁擴充既有 bundle
 ```
 
-## 關鍵名詞
+## 核心工作流程（完整內容見 `SKILL.md`）
 
-| 名詞 | 說明 |
-|---|---|
-| **Knowledge Bundle** | 自成一體、有階層的 markdown 知識文件集合，是分發的單位 |
-| **Concept** | bundle 內的一個知識單元，對應一份 `.md` 檔案 — 可以是具體資產（表格、API）或抽象概念（SOP、playbook） |
-| **Concept ID** | 該文件在 bundle 內的路徑去掉 `.md` 副檔名（例如 `it-support/vpn-troubleshooting`） |
-| **Frontmatter** | 每份概念檔案開頭的 YAML 區塊（`type` 為必填欄位） |
+1. 確認輸出位置與 bundle 名稱（`<輸出位置>\<YYYYMMDD>-OKF`，若既有 bundle 已存在則改為就地更新）。
+2. 讀取所有來源檔案，決定分類子目錄。
+3. 依照 `references/okf-spec-summary.md` 的 frontmatter／body 規則，為每個知識點寫一份 concept 文件。
+4. 將圖片搬移到對應分類底下的 `img/` 資料夾，並記錄到 frontmatter（見 `references/image-handling.md`）。
+5. 在 bundle 根目錄與每個有內容的子目錄產生 `index.md`。
+6. （選用）更新既有 bundle 時，在 `log.md` 補上帶日期的異動紀錄。
+7. 檢查產生的目錄結構，客觀指出分類方式或省略內容裡可能存在的疑點（例如 `type` 判斷不明確、圖片找不到明確歸屬分類），不要無條件回報「已完美產生」。
 
-## OKF 概念檔案格式
+## 已知的限制與需要注意的地方
 
-```yaml
----
-type: Troubleshooting Guide    # 必填
-title: VPN 連線疑難排解       # 建議
-description: VPN 連線失敗時的排查步驟。  # 建議
-resource: https://...          # 選填 - 對應資產的 URI
-tags: [it-support, vpn]        # 選填
-timestamp: 2026-07-09T10:00:00Z  # 選填
-images: [error-screenshot.png] # 自訂擴充欄位，記錄圖片檔名
----
-```
-
-## 前置條件
-
-此技能需要具備以下五種抽象能力的檔案系統工具：
-
-| 抽象能力 | 說明 |
-|---|---|
-| 讀檔 | 讀取單一檔案完整內容 |
-| 寫檔 | 建立新檔案或覆寫既有檔案 |
-| 建立目錄 | 建立資料夾（含巢狀路徑） |
-| 列出目錄 | 列出指定路徑下的檔案與子目錄 |
-| 搬移檔案 | 將檔案從一個路徑移動到另一個路徑 |
-
-對應到任何檔案系統 MCP server（例如 `Filesystem:read_text_file`、`Filesystem:write_file` 等）或 Claude 的沙盒工具。
-
-## 工作流程
-
-1. **確認輸出位置** — 詢問使用者 bundle 放置位置（預設：`<Desktop>/<YYYYMMDD>-OKF/`）
-2. **分析來源內容** — 依主題分類成子目錄（例如 `it-support`、`network`、`database`）
-3. **撰寫概念檔案** — 每個知識點建立一份 `.md`，遵循 OKF frontmatter/body 規則
-4. **處理圖片** — 將圖片搬移至 `<分類>/img/`，用相對路徑嵌入，在 frontmatter `images` 欄位記錄
-5. **產生 index.md** — 在 bundle 根目錄與每個分類目錄建立
-6. **選用：記錄異動** — 若為更新既有 bundle，在 `log.md` 追加紀錄
-7. **自我驗證** — 檢查目錄結構、驗證 frontmatter、確認圖片放置、檢查連結
-
-## 進階功能
-
-### 從 Metadata 擴充
-
-從結構化資料（資料庫 schema、API 規格、資料集描述）產生概念文件。詳見 `prompts/enrich-from-metadata.md`。
-
-### 從網頁擷取
-
-從權威文件網站抓取內容擴充既有 bundle。支援指標、維度與 join 路徑的結構化擷取。詳見 `prompts/ingest-from-web.md`。
-
-### 進階慣例
-
-超出 OKF v0.1 規範的選用組織方式：
-- `references/` 子目錄放置共用定義
-- `references/metrics/<slug>.md` 放置含 SQL 的指標定義
-- `references/joins/<a>__<b>.md` 放置表格 join 路徑
-- 概念文件中使用 `# Metrics`、`# Joins`、`# Dimensions` 章節
-
-詳見 `references/advanced-conventions.md`。
-
-## OKF 合規規則（v0.1）
-
-一個 bundle 符合規範的條件：
-
-1. 每個非保留檔名的 `.md` 檔都含有可解析的 YAML frontmatter，且 `type` 欄位非空
-2. 保留檔名（`index.md`、`log.md`）符合各自格式規則
-3. Consumer 必須容忍：選填欄位缺漏、未知 `type` 值、未知額外欄位、失效內部連結、缺少 `index.md`
+- 沒有連接檔案系統 MCP 時的沙盒備援路徑，沒有辦法在使用者自己的電腦上做「複製」，只能搬移。若使用者需要保留原始檔案，這件事需要自己手動處理。
+- `ingest-from-web.md` 使用的 `web_fetch` 只能抓取已經出現在對話中的網址，本身沒有獨立的爬取能力，也沒有內建的頁數上限或網域白名單機制，這些限制需要在工作流程中自行計數與遵守。
+- 選用的輔助技能（`kb-search`、`fileset-source`）預設會連接特定 MCP server（`fileskb`、`md-fileset`）；沒有連接時，備援方式會退化成列出全部檔案再逐一手動比對關鍵字，面對大型知識庫時擴展性不佳。
