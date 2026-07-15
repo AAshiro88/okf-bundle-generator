@@ -1,6 +1,6 @@
 # OKF Bundle Generator
 
-An AI skill that converts documents (text files, Word, PDF, source code, chat logs, screenshots, or any material) into [Open Knowledge Format (OKF)](https://github.com/anomalyco/opencode) knowledge bundles — structured, hierarchical markdown knowledge bases that can be read by both humans and AI agents.
+An AI skill that converts documents (text files, Word, PDF, source code, chat logs, screenshots, or any material) into [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) knowledge bundles — structured, hierarchical markdown knowledge bases that can be read by both humans and AI agents.
 
 ## What It Does
 
@@ -125,7 +125,7 @@ A bundle is conformant when:
 
 # OKF Bundle Generator
 
-一個 AI 技能，將使用者提供的文件（文字檔、Word、PDF、程式碼、聊天紀錄、螢幕截圖或任何素材）轉換成 [Open Knowledge Format (OKF)](https://github.com/anomalyco/opencode) 知識包 — 結構化、具層級的 markdown 知識庫，可被人類與 AI agent 讀取。
+一個 AI 技能，將使用者提供的文件（文字檔、Word、PDF、程式碼、聊天紀錄、螢幕截圖或任何素材）轉換成 [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) 知識包 — 結構化、具層級的 markdown 知識庫，可被人類與 AI agent 讀取。
 
 ## 功能說明
 
