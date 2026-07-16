@@ -1,6 +1,6 @@
 # okf-bundle-generator
 
-A Claude Skill that converts user-supplied source material (text files, Word documents, PDFs, code, chat logs, screenshots, or any other input) into a markdown knowledge bundle conforming to the [Open Knowledge Format (OKF) v0.1 spec](./SPEC.md), and writes it directly to the user's local filesystem.
+A Claude Skill that converts user-supplied source material (text files, Word documents, PDFs, code, chat logs, screenshots, or any other input) into a markdown knowledge bundle conforming to the [Open Knowledge Format (OKF) v0.1 spec](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md), and writes it directly to the user's local filesystem.
 
 This README covers three layers: (1) the OKF spec itself, since the Skill's output is only useful if it actually conforms to it; (2) the personal conventions this Skill layers on top of OKF, which are **not** part of the official spec; (3) how the Skill and its files are organized.
 
@@ -219,7 +219,7 @@ ____
 
 # okf-bundle-generator
 
-這是一個 Claude Skill，將使用者提供的來源素材（文字檔、Word、PDF、程式碼、聊天紀錄、螢幕截圖或其他任何素材）轉換成符合 [Open Knowledge Format（OKF）v0.1 規範](./SPEC.md) 的 markdown 知識包，並直接寫入使用者本機的檔案系統。
+這是一個 Claude Skill，將使用者提供的來源素材（文字檔、Word、PDF、程式碼、聊天紀錄、螢幕截圖或其他任何素材）轉換成符合 [Open Knowledge Format（OKF）v0.1 規範](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) 的 markdown 知識包，並直接寫入使用者本機的檔案系統。
 
 這份 README 分三層說明：（1）OKF 規範本身——因為這個 Skill 產出的東西是否有用，取決於它是否真的符合規範；（2）這個 Skill 疊加在 OKF 之上、**不屬於**官方規範的個人慣例；（3）Skill 本身與其檔案的組織方式。
 
